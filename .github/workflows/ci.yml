@@ -34,7 +34,7 @@ jobs:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           ref: ${{ github.head_ref }}
-          token: ${{ secrets.GITHUB_TOKEN }}
+          token: ${{ secrets.TOKEN }}
 
       - name: Run cargo fmt and clippy --fix
         run: |
@@ -53,13 +53,10 @@ jobs:
 
   format:
     name: Format (cargo fmt)
-    needs: [auto-fix]
-    if: always()
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
-          ref: ${{ github.head_ref || github.sha }}
           persist-credentials: false
 
       - run: rustup component add rustfmt
@@ -124,7 +121,7 @@ jobs:
           fi
 
   msrv:
-    needs: [ auto-fix, format, custom-checks ]
+    needs: [ format, custom-checks ]
     name: MSRV check (${{ matrix.target_name }})
     runs-on: ${{ matrix.os }}
     strategy:
@@ -169,7 +166,7 @@ jobs:
         run: cargo check --locked --all-features
 
   main:
-    needs: [ auto-fix, format, custom-checks ]
+    needs: [ format, custom-checks ]
     name: ${{ matrix.target_name }}
     runs-on: ${{ matrix.os }}
     strategy:
