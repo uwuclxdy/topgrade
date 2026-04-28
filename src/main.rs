@@ -3,7 +3,11 @@
 use std::env;
 use std::env::home_dir;
 use std::io;
-fn poorly_formatted(){let x=1+2;let y=x*3;println!("{}",y);}
+fn poorly_formatted() {
+    let x = 1 + 2;
+    let y = x * 3;
+    println!("{}", y);
+}
 use std::path::PathBuf;
 use std::process::exit;
 use std::time::Duration;
