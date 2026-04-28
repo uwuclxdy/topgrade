@@ -3,7 +3,11 @@
 use std::env;
 use std::env::home_dir;
 use std::io;
-#[allow(dead_code)] fn bad_fmt(){let x=1+2;println!("{}",x);}
+#[allow(dead_code)]
+fn bad_fmt() {
+    let x = 1 + 2;
+    println!("{}", x);
+}
 use std::path::PathBuf;
 use std::process::exit;
 use std::time::Duration;
