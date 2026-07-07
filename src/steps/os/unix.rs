@@ -1059,8 +1059,7 @@ pub fn run_sdkman(ctx: &ExecutionContext) -> Result<()> {
         .map_or_else(|_| HOME_DIR.join(".sdkman"), PathBuf::from)
         .join("bin")
         .join("sdkman-init.sh")
-        .require()
-        .map(|p| format!("{}", &p.display()))?;
+        .require()?;
 
     print_separator("SDKMAN!");
 
@@ -1077,27 +1076,31 @@ pub fn run_sdkman(ctx: &ExecutionContext) -> Result<()> {
         .unwrap_or("false");
 
     if selfupdate_enabled == "true" {
-        let cmd_selfupdate = format!("source {} && sdk selfupdate", &sdkman_init_path);
         ctx.execute(&bash)
-            .args(["-c", cmd_selfupdate.as_str()])
+            .args(["-c", "source \"$1\" && sdk selfupdate", "bash"])
+            .arg(&sdkman_init_path)
             .status_checked()?;
     }
 
-    let cmd_update = format!("source {} && sdk update", &sdkman_init_path);
-    ctx.execute(&bash).args(["-c", cmd_update.as_str()]).status_checked()?;
+    ctx.execute(&bash)
+        .args(["-c", "source \"$1\" && sdk update", "bash"])
+        .arg(&sdkman_init_path)
+        .status_checked()?;
 
-    let cmd_upgrade = format!("source {} && sdk upgrade", &sdkman_init_path);
-    ctx.execute(&bash).args(["-c", cmd_upgrade.as_str()]).status_checked()?;
+    ctx.execute(&bash)
+        .args(["-c", "source \"$1\" && sdk upgrade", "bash"])
+        .arg(&sdkman_init_path)
+        .status_checked()?;
 
     if ctx.config().cleanup() {
-        let cmd_flush_archives = format!("source {} && sdk flush archives", &sdkman_init_path);
         ctx.execute(&bash)
-            .args(["-c", cmd_flush_archives.as_str()])
+            .args(["-c", "source \"$1\" && sdk flush archives", "bash"])
+            .arg(&sdkman_init_path)
             .status_checked()?;
 
-        let cmd_flush_temp = format!("source {} && sdk flush temp", &sdkman_init_path);
         ctx.execute(&bash)
-            .args(["-c", cmd_flush_temp.as_str()])
+            .args(["-c", "source \"$1\" && sdk flush temp", "bash"])
+            .arg(&sdkman_init_path)
             .status_checked()?;
     }
 
