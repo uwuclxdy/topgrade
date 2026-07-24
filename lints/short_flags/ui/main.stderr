@@ -1,5 +1,5 @@
 warning: short flag `-Syu`; use the long form
-  --> $DIR/main.rs:50:32
+  --> $DIR/main.rs:48:32
    |
 LL |     Command::new("pacman").arg("-Syu");
    |                                ^^^^^^
@@ -7,22 +7,28 @@ LL |     Command::new("pacman").arg("-Syu");
    = note: `#[warn(short_flags)]` on by default
 
 warning: short flag `-i`; use the long form
-  --> $DIR/main.rs:55:13
+  --> $DIR/main.rs:53:13
    |
 LL |     cmd.arg("-i");
    |             ^^^^
 
 warning: short flag `-f`; use the long form
-  --> $DIR/main.rs:64:52
+  --> $DIR/main.rs:62:52
    |
 LL |     Command::new("docker").args(["image", "prune", "-f"]);
    |                                                    ^^^^
 
 warning: short flag `-z`; use the long form
-  --> $DIR/main.rs:76:18
+  --> $DIR/main.rs:70:20
+   |
+LL |     local_exec.arg("-z");
+   |                    ^^^^
+
+warning: short flag `-z`; use the long form
+  --> $DIR/main.rs:74:18
    |
 LL |     mod_exec.arg("-z");
    |                  ^^^^
 
-warning: 4 warnings emitted
+warning: 5 warnings emitted
 

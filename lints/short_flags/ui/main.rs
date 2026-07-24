@@ -12,9 +12,9 @@ impl Other {
     }
 }
 
-// case 7 negative: a LOCAL type named `Executor`. The lint matches the qualified
-// path `executor::Executor`; this crate-root local type prints as `Executor`, so it
-// must NOT fire. Proves the match is path-based, not a bare-name match.
+// case 7: a crate-root local type named `Executor`. Crate-local matching fires on any local
+// `Executor` regardless of module location, so this FIRES (it was the negative before the match
+// was made rename-robust). The decoy `Other` (case 6) is the non-`Executor` negative.
 struct Executor {
     argv: Vec<String>,
 }
@@ -26,10 +26,8 @@ impl Executor {
     }
 }
 
-// case 8 positive: a type at the qualified path `executor::Executor`. `def_path_str`
-// drops the crate-under-lint's name, so this resolves to exactly `executor::Executor` --
-// identical to topgrade's own `src/executor.rs` (module `executor`), the arm that fires
-// 131x on real topgrade. This gives the real firing arm in-suite coverage.
+// case 8: a local `Executor` nested in a module. Fires like case 7 -- crate-local matching is
+// module-location-independent. Mirrors topgrade's own `Executor` in `src/executor.rs`.
 mod executor {
     use std::ffi::OsStr;
 
@@ -67,7 +65,7 @@ fn main() {
     let mut other = Other;
     other.arg("-x");
 
-    // case 7: crate-root LOCAL `Executor` -> must NOT fire (path-based, not name match)
+    // case 7: crate-root local `Executor` -> MUST FIRE (crate-local match, module-independent)
     let mut local_exec = Executor { argv: Vec::new() };
     local_exec.arg("-z");
 
