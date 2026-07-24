@@ -1,0 +1,55 @@
+# Repo-local Dylint lint: bans short CLI flags (`-Syu`, `-i`, ...) passed to a command
+# builder (`executor::Executor` / `std::process::Command`).
+#
+# NON-BLOCKING on purpose. The ~131 existing short-flag call sites are not yet converted
+# to long forms, so this job only reports (see `continue-on-error` below). Flip enforcement
+# to blocking -- drop the `continue-on-error` line and set the lint level to `Deny` in
+# `lints/short_flags/src/lib.rs` -- once the short-flag -> long-form conversion lands and
+# the hit count reaches zero.
+
+name: Dylint
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+defaults:
+  run:
+    shell: bash
+
+env:
+  CARGO_NET_RETRY: 3
+  CARGO_TERM_COLOR: always
+
+jobs:
+  short-flags:
+    name: Short-flag lint (non-blocking)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      # Toolchain the lint builds under, pinned by lints/short_flags/rust-toolchain.
+      - name: Install lint toolchain
+        run: |
+          rustup toolchain install nightly-2026-04-16 --profile minimal \
+            --component rustc-dev --component llvm-tools-preview
+
+      - uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
+
+      - name: Install cargo-dylint and dylint-link
+        run: cargo install cargo-dylint dylint-link --version 6.0.1 --locked
+
+      - name: Run short_flags lint
+        continue-on-error: true
+        run: cargo dylint --path lints/short_flags
