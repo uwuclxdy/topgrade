@@ -23,7 +23,7 @@ use tracing::{debug, error};
 
 use crate::execution_context::RunType;
 use crate::step::{DEPRECATED_STEPS, Step};
-use crate::sudo::SudoKind;
+use crate::sudo::{SudoKind, SudoPathCheck};
 use crate::terminal::print_warning;
 use crate::utils::string_prepend_str;
 
@@ -367,6 +367,8 @@ pub struct Misc {
     sudo_loop_interval: Option<u16>,
 
     sudo_command: Option<SudoKind>,
+
+    sudo_path_check: Option<SudoPathCheck>,
 
     #[merge(strategy = crate::utils::merge_strategies::vec_prepend_opt)]
     disable: Option<Vec<Step>>,
@@ -1948,6 +1950,15 @@ impl Config {
 
     pub fn sudo_command(&self) -> Option<SudoKind> {
         self.config_file.misc.as_ref().and_then(|misc| misc.sudo_command)
+    }
+
+    /// How to handle a binary resolved from the user's PATH that isn't safe to run as root
+    pub fn sudo_path_check(&self) -> SudoPathCheck {
+        self.config_file
+            .misc
+            .as_ref()
+            .and_then(|misc| misc.sudo_path_check)
+            .unwrap_or_default()
     }
 
     /// If `true`, `sudo -v` should be called to cache credentials at the start of the run

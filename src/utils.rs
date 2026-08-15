@@ -166,6 +166,36 @@ fn which_native_in_wsl<T: AsRef<OsStr> + Debug>(binary_name: T) -> Option<PathBu
     }
 }
 
+/// The binary itself or the first ancestor directory (up to `/`) that is unsafe to
+/// execute as root: not owned by `root`, or writable by a non-root user. `None` means
+/// the whole chain is root-trusted.
+///
+/// Pass a canonicalized path so symlinks are already resolved to what root will actually
+/// run. Always `None` off Unix, where execute trust is governed by ACLs rather than
+/// owner/mode bits and this model doesn't apply.
+#[cfg(unix)]
+pub fn first_root_untrusted_component(path: &Path) -> Option<PathBuf> {
+    use std::os::unix::fs::MetadataExt;
+
+    let mut component = Some(path);
+    while let Some(current) = component {
+        match current.symlink_metadata() {
+            // group/other-writable (`0o022`) means a non-root user could swap what runs as root
+            Ok(meta) if meta.uid() != 0 || (meta.mode() & 0o022) != 0 => return Some(current.to_path_buf()),
+            // vanished or unreadable: let the exec fail as usual
+            Err(_) => return None,
+            Ok(_) => {}
+        }
+        component = current.parent();
+    }
+    None
+}
+
+#[cfg(not(unix))]
+pub fn first_root_untrusted_component(_path: &Path) -> Option<PathBuf> {
+    None
+}
+
 pub fn which<T: AsRef<OsStr> + Debug>(binary_name: T) -> Option<PathBuf> {
     if wsl_windows_path_filter_enabled() {
         return which_native_in_wsl(&binary_name);
@@ -470,4 +500,26 @@ macro_rules! output_changed_message {
             env!("CARGO_PKG_VERSION"),
         )
     };
+}
+
+#[cfg(all(test, unix))]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn root_dir_is_root_trusted() {
+        // `/` is root-owned and not group/other-writable on any sane Unix
+        assert!(first_root_untrusted_component(Path::new("/")).is_none());
+    }
+
+    #[test]
+    fn user_owned_binary_is_untrusted() {
+        // in root-run CI containers the target dir is root-owned and nothing gets flagged
+        if is_elevated() {
+            return;
+        }
+        // the test binary lives under a user-owned target dir, so it must be flagged
+        let exe = std::env::current_exe().unwrap();
+        assert!(first_root_untrusted_component(&exe).is_some());
+    }
 }

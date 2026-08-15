@@ -20,11 +20,11 @@ use tracing::{debug, warn};
 use windows::Win32::Foundation::ERROR_FILE_NOT_FOUND;
 
 use crate::command::CommandExt;
-use crate::error::UnsupportedSudo;
+use crate::error::{SkipStep, UnsupportedSudo};
 use crate::execution_context::{ExecutionContext, RunType};
 use crate::executor::Executor;
-use crate::terminal::print_separator;
-use crate::utils::which;
+use crate::terminal::{print_separator, print_warning};
+use crate::utils::{first_root_untrusted_component, which};
 
 #[derive(Clone, Debug)]
 pub struct Sudo {
@@ -417,6 +417,12 @@ impl Sudo {
             return Ok(ctx.execute(command));
         }
 
+        // de-escalation to another user crosses no root boundary
+        let runs_as_root = !opts.user.is_some_and(|user| !is_root_user(user));
+        if runs_as_root {
+            verify_root_trusted(ctx, command.as_ref())?;
+        }
+
         let mut args: Vec<String> = Vec::new();
 
         if opts.login_shell {
@@ -551,6 +557,92 @@ impl Sudo {
         cmd.args(args).arg(command);
 
         Ok(cmd)
+    }
+}
+
+/// What to do when a binary about to run under `sudo` resolves, via the invoking
+/// user's `PATH`, to a path that a non-root user could control (e.g. a shim in
+/// `~/.local/bin` shadowing the real tool). Such a binary would execute as root.
+///
+/// See: https://github.com/topgrade-rs/topgrade/issues/2116
+#[derive(Clone, Copy, Debug, Default, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum SudoPathCheck {
+    /// Don't check.
+    Off,
+    /// Run anyway, but warn and name the untrusted path.
+    #[default]
+    Warn,
+    /// Skip the step instead of running an untrusted binary as root.
+    Error,
+}
+
+/// `root` under any spelling sudo accepts: the name, a uid-0 alias, or `0`.
+#[cfg(unix)]
+fn is_root_user(user: &str) -> bool {
+    user.parse::<u32>().is_ok_and(|uid| uid == 0)
+        || nix::unistd::User::from_name(user)
+            .ok()
+            .flatten()
+            .map(|u| u.uid.is_root())
+            .unwrap_or(false)
+}
+
+#[cfg(not(unix))]
+fn is_root_user(_user: &str) -> bool {
+    false
+}
+
+/// Guard against running a non-root-trusted binary under `sudo`.
+///
+/// Topgrade resolves tools from the invoking user's `PATH`, then elevates. A
+/// user-writable directory ahead of the real tool lets a shadowing binary run as
+/// root. Verify the resolved binary and every ancestor are root-owned and not
+/// writable by non-root before handing the path to `sudo`.
+///
+/// Best-effort: `sudo` re-resolves the path at exec time, so the vetted file can
+/// still be swapped after this check (TOCTOU). The threat model of issue 2116
+/// accepts that.
+fn verify_root_trusted(ctx: &ExecutionContext, command: &OsStr) -> Result<()> {
+    let check = ctx.config().sudo_path_check();
+    if let SudoPathCheck::Off = check {
+        return Ok(());
+    }
+
+    let path = Path::new(command);
+    // only absolute paths are vetted: bare names are resolved by sudo itself
+    if !path.is_absolute() {
+        return Ok(());
+    }
+    // If it can't be resolved we can't vet it; let the real exec fail/skip as usual.
+    let Ok(canonical) = path.canonicalize() else {
+        return Ok(());
+    };
+    let Some(untrusted) = first_root_untrusted_component(&canonical) else {
+        return Ok(());
+    };
+
+    let detail = t!(
+        "{binary} resolves through {path}, which is not owned by root or is writable by non-root users",
+        binary = canonical.display().to_string(),
+        path = untrusted.display().to_string(),
+    );
+    match check {
+        SudoPathCheck::Error => {
+            let msg = t!("Refusing to run as root: {detail}", detail = detail);
+            print_warning(&msg);
+            Err(SkipStep(msg.to_string()).into())
+        }
+        SudoPathCheck::Warn => {
+            print_warning(format!(
+                "{}. {}",
+                t!("Running as root from an untrusted path: {detail}", detail = detail),
+                t!("Disable this check by setting `sudo_path_check = \"off\"`.")
+            ));
+            Ok(())
+        }
+        // handled above
+        SudoPathCheck::Off => Ok(()),
     }
 }
 
