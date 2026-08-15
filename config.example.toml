@@ -27,6 +27,18 @@
 # Sudo command to be used
 # sudo_command = "sudo"
 
+# Topgrade resolves tools from your PATH and then runs them as root. A binary
+# placed in a user-writable directory ahead of the real tool (e.g. a shim in
+# ~/.local/bin) would therefore execute as root. This controls what happens when
+# the resolved binary, or any directory it resolves through, is not owned by root
+# or is group/other-writable:
+#   "off"   - don't check
+#   "warn"  - run anyway, but print a warning naming the untrusted path (default)
+#   "error" - skip the step instead of running it as root
+# Tools living in a user-owned prefix (e.g. Homebrew on macOS) will trigger this.
+# Unix only.
+# sudo_path_check = "warn"
+
 # Disable specific steps - same options as the command line flag
 # disable = ["system", "emacs"]
 

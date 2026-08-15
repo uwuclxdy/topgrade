@@ -166,6 +166,35 @@ fn which_native_in_wsl<T: AsRef<OsStr> + Debug>(binary_name: T) -> Option<PathBu
     }
 }
 
+/// First component of `path` that is unsafe to run as root: not root-owned, or
+/// group/other-writable. `None` means the whole chain is root-trusted.
+///
+/// Takes a canonicalized path (symlinks resolved to what root runs). The
+/// owner/mode-bit check is best-effort and cannot model ACLs; off Unix it is
+/// always `None`.
+#[cfg(unix)]
+pub fn first_root_untrusted_component(path: &Path) -> Option<PathBuf> {
+    use std::os::unix::fs::MetadataExt;
+
+    let mut component = Some(path);
+    while let Some(current) = component {
+        match current.symlink_metadata() {
+            // group/other-writable (`0o022`) means a non-root user could swap what runs as root
+            Ok(meta) if meta.uid() != 0 || (meta.mode() & 0o022) != 0 => return Some(current.to_path_buf()),
+            // vanished or unreadable: let the exec fail as usual
+            Err(_) => return None,
+            Ok(_) => {}
+        }
+        component = current.parent();
+    }
+    None
+}
+
+#[cfg(not(unix))]
+pub fn first_root_untrusted_component(_path: &Path) -> Option<PathBuf> {
+    None
+}
+
 pub fn which<T: AsRef<OsStr> + Debug>(binary_name: T) -> Option<PathBuf> {
     if wsl_windows_path_filter_enabled() {
         return which_native_in_wsl(&binary_name);
